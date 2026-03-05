@@ -22,8 +22,11 @@ io.on('connection', (socket) => {
     // Host identifies itself
     socket.on('host-join', () => {
         socket.join('host-room');
+        // Reset state to LOBBY whenever a new host connects/reloads
+        gameState = 'LOBBY';
+        io.emit('state-changed', { gameState });
         socket.emit('sync-state', { gameState });
-        console.log('Host connected and joined host-room');
+        console.log('Host connected: State reset to LOBBY');
     });
 
     // Player joins from controller
@@ -85,6 +88,13 @@ io.on('connection', (socket) => {
             console.log(`Player disconnected: ${players[socket.id].name}`);
             io.to('host-room').emit('player-left', socket.id);
             delete players[socket.id];
+
+            // If no players left, reset game state
+            if (Object.keys(players).length === 0) {
+                gameState = 'LOBBY';
+                io.emit('state-changed', { gameState });
+                console.log('All players left: State reset to LOBBY');
+            }
         }
     });
 });
