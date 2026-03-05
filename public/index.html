@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pixel Pulse: 1vs100 - Host</title>
+    <script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser-arcade-physics.min.js"></script>
+    <script src="/socket.io/socket.io.js"></script>
+    <style>
+        body {
+            margin: 0;
+            background: #050510;
+            overflow: hidden;
+            font-family: 'Arial', sans-serif;
+        }
+
+        canvas {
+            display: block;
+        }
+
+        #ui-layer {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: #00ffcc;
+            pointer-events: none;
+            text-shadow: 0 0 10px #00ffcc;
+            font-weight: bold;
+            font-size: 20px;
+        }
+
+        #center-ui {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            pointer-events: none;
+            z-index: 100;
+            width: 100%;
+        }
+
+        .status-text {
+            font-size: 40px;
+            color: #00ffcc;
+            text-shadow: 0 0 20px #00ffcc;
+            margin-bottom: 20px;
+        }
+
+        .countdown-text {
+            font-size: 150px;
+            color: #fff;
+            text-shadow: 0 0 30px #fff;
+            font-weight: 900;
+        }
+
+        #champion-overlay {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            display: none;
+            z-index: 101;
+        }
+
+        .champion-text {
+            font-size: 80px;
+            color: #fff;
+            text-shadow: 0 0 20px #ff00ff, 0 0 40px #ff00ff, 0 0 60px #ff00ff;
+            animation: pulse 1s infinite alternate;
+        }
+
+        @keyframes pulse {
+            from {
+                transform: scale(1);
+            }
+
+            to {
+                transform: scale(1.1);
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div id="ui-layer">Players Alive: 0</div>
+
+    <div id="center-ui">
+        <div id="status-display" class="status-text">MENUNGGU PEMAIN LAIN...</div>
+        <div id="countdown-display" class="countdown-text"></div>
+    </div>
+
+    <div id="champion-overlay">
+        <div class="champion-text">CHAMPION</div>
+        <div id="winner-name" style="font-size: 40px; color: #00ffcc;"></div>
+        <div style="color: #666; font-size: 18px; margin-top: 20px;">Restarting in 5s...</div>
+    </div>
+
+    <script>
+        const socket = io();
+        let players = {};
+        let arenaCircle;
+        let arenaRadius;
+        let targetRadius;
+        let initialRadius;
+        let grid;
+
+        let gameState = 'LOBBY'; // LOBBY, STARTING, PLAYING, FINISHED
+        let countdownValue = 5;
+
+        const config = {
+            type: Phaser.AUTO,
+            parent: 'phaser-game',
+            width: window.innerWidth,
+            height: window.innerHeight,
+            resolution: window.devicePixelRatio, // High DPI support
+            antialias: true,
+            roundPixels: true,
+            backgroundColor: '#050510',
+            scale: {
+                mode: Phaser.Scale.RESIZE,
+                autoCenter: Phaser.Scale.CENTER_BOTH
+            },
+            physics: {
+                default: 'arcade',
+                arcade: {
+                    gravity: { y: 0 },
+                    debug: false,
+                    fps: 60
+                }
+            },
+            scene: {
+                preload: preload,
+                create: create,
+                update: update
+            }
+        };
+
+        const game = new Phaser.Game(config);
+
+        function preload() { }
+
+        function create() {
+            const self = this;
+
+            // Create Neon Grid
+            grid = this.add.grid(this.cameras.main.centerX, this.cameras.main.centerY, config.width * 2, config.height * 2, 64, 64, 0x000000, 0, 0x00ffcc, 0.1);
+
+            // Background Gradient simulation
+            const graphics = this.add.graphics();
+            graphics.fillGradientStyle(0x050510, 0x050510, 0x100520, 0x100520, 1);
+            graphics.fillRect(0, 0, this.cameras.main.width, this.cameras.main.height);
+            graphics.setScrollFactor(0);
+            graphics.depth = -1;
+
+            // Arena setup
+            initialRadius = Math.min(this.cameras.main.width, this.cameras.main.height) * 0.45;
+            arenaRadius = initialRadius;
+            targetRadius = arenaRadius;
+
+            arenaCircle = this.add.graphics();
+            updateArenaGraphics(arenaCircle, arenaRadius, false);
+
+            this.playerGroup = this.physics.add.group({
+                bounceX: 1,
+                bounceY: 1,
+                collideWorldBounds: false
+            });
+
+            this.physics.add.collider(this.playerGroup, this.playerGroup);
+
+            socket.emit('host-join');
+
+            socket.on('new-player', (playerData) => {
+                addPlayer(self, playerData);
+                checkLobby(self);
+                updateUI();
+            });
+
+            socket.on('player-move', (data) => {
+                const p = players[data.id];
+                if (p && p.sprite && p.sprite.body) {
+                    const force = 1200; // Increased acceleration
+                    const input = data.input;
+
+                    if (input.up) p.sprite.setAccelerationY(-force);
+                    else if (input.down) p.sprite.setAccelerationY(force);
+                    else p.sprite.setAccelerationY(0);
+
+                    if (input.left) p.sprite.setAccelerationX(-force);
+                    else if (input.right) p.sprite.setAccelerationX(force);
+                    else p.sprite.setAccelerationX(0);
+                }
+            });
+
+            socket.on('player-left', (id) => {
+                removePlayer(id);
+                if (gameState === 'LOBBY') checkLobby(self);
+                updateUI();
+            });
+
+            // Shrink Loop
+            this.shrinkTimer = this.time.addEvent({
+                delay: 15000,
+                callback: () => {
+                    if (gameState !== 'PLAYING') return;
+                    targetRadius *= 0.85;
+                    // Warning pulse
+                    this.tweens.addCounter({
+                        from: 0,
+                        to: 5,
+                        duration: 2000,
+                        onUpdate: (tween) => {
+                            const val = Math.floor(tween.getValue());
+                            updateArenaGraphics(arenaCircle, arenaRadius, val % 2 === 0);
+                        }
+                    });
+                },
+                loop: true,
+                paused: true
+            });
+
+            window.addEventListener('resize', () => {
+                game.scale.resize(window.innerWidth, window.innerHeight);
+                // Adjust arena center if needed
+            });
+        }
+
+        function checkLobby(scene) {
+            const count = Object.keys(players).length;
+            if (gameState === 'LOBBY') {
+                if (count >= 2) {
+                    startCountdown(scene);
+                } else {
+                    document.getElementById('status-display').innerText = "MENUNGGU PEMAIN LAIN... (Min. 2 Orang)";
+                }
+            }
+        }
+
+        function startCountdown(scene) {
+            gameState = 'STARTING';
+            socket.emit('update-state', gameState);
+            document.getElementById('status-display').innerText = "PERSIAPAN...";
+            countdownValue = 5;
+
+            const timer = scene.time.addEvent({
+                delay: 1000,
+                callback: () => {
+                    if (countdownValue > 0) {
+                        document.getElementById('countdown-display').innerText = countdownValue;
+                        countdownValue--;
+                    } else {
+                        document.getElementById('countdown-display').innerText = "GO!";
+                        scene.time.delayedCall(1000, () => {
+                            document.getElementById('center-ui').style.display = 'none';
+                            startGame(scene);
+                        });
+                        timer.remove();
+                    }
+                },
+                loop: true
+            });
+        }
+
+        function startGame(scene) {
+            gameState = 'PLAYING';
+            socket.emit('update-state', gameState);
+            scene.shrinkTimer.paused = false;
+        }
+
+        function updateArenaGraphics(g, radius, isWarning) {
+            g.clear();
+            const color = isWarning ? 0xff0000 : 0x00ffcc;
+            const centerX = game.scene.scenes[0].cameras.main.centerX;
+            const centerY = game.scene.scenes[0].cameras.main.centerY;
+
+            // Glow layers
+            for (let i = 10; i > 0; i--) {
+                g.lineStyle(i, color, 0.1);
+                g.strokeCircle(centerX, centerY, radius + i);
+            }
+
+            g.lineStyle(4, color, 0.8);
+            g.strokeCircle(centerX, centerY, radius);
+        }
+
+        function addPlayer(scene, data) {
+            const centerX = scene.cameras.main.centerX;
+            const centerY = scene.cameras.main.centerY;
+            const angle = Math.random() * Math.PI * 2;
+            const dist = Math.random() * (arenaRadius - 50);
+            const x = centerX + Math.cos(angle) * dist;
+            const y = centerY + Math.sin(angle) * dist;
+
+            const radius = 25;
+            const graphics = scene.add.graphics();
+            graphics.lineStyle(4, parseInt(data.color.replace('#', '0x')), 1);
+            graphics.strokeCircle(radius, radius, radius - 2);
+            graphics.fillStyle(parseInt(data.color.replace('#', '0x')), 0.5);
+            graphics.fillCircle(radius, radius, radius - 2);
+
+            const textureName = `circle_${data.id}`;
+            graphics.generateTexture(textureName, radius * 2, radius * 2);
+            graphics.destroy();
+
+            const sprite = scene.physics.add.sprite(x, y, textureName);
+            sprite.setCircle(radius);
+            sprite.setDrag(100);
+            sprite.setBounce(1);
+            sprite.setMass(1);
+
+            scene.playerGroup.add(sprite);
+
+            const nameTag = scene.add.text(x, y - 45, data.name, {
+                fontSize: '16px',
+                fill: '#fff',
+                fontStyle: 'bold',
+                backgroundColor: '#000000aa',
+                padding: { x: 6, y: 3 }
+            }).setOrigin(0.5);
+
+            players[data.id] = { id: data.id, name: data.name, sprite, nameTag, color: data.color };
+        }
+
+        function removePlayer(id) {
+            if (players[id]) {
+                players[id].nameTag.destroy();
+                players[id].sprite.destroy();
+                delete players[id];
+            }
+        }
+
+        function updateUI() {
+            const aliveCount = Object.keys(players).length;
+            document.getElementById('ui-layer').innerText = `Players Alive: ${aliveCount}`;
+
+            if (gameState === 'PLAYING' && aliveCount === 1) {
+                const winnerId = Object.keys(players)[0];
+                declareWinner(players[winnerId]);
+            }
+        }
+
+        function declareWinner(player) {
+            gameState = 'FINISHED';
+            socket.emit('winner-declared', { id: player.id, name: player.name });
+
+            document.getElementById('winner-name').innerText = player.name;
+            document.getElementById('champion-overlay').style.display = 'block';
+
+            // Zoom into winner
+            player.sprite.setAcceleration(0, 0);
+            player.sprite.setVelocity(0, 0);
+
+            setTimeout(() => {
+                window.location.reload();
+            }, 5000);
+        }
+
+        function update(time, delta) {
+            if (gameState === 'FINISHED') return;
+
+            // Scroll Grid
+            grid.y += 0.5;
+            if (grid.y > config.height / 2 + 64) grid.y = config.height / 2;
+
+            // Smooth shrinking
+            if (gameState === 'PLAYING' && arenaRadius > targetRadius) {
+                arenaRadius -= 0.5;
+                updateArenaGraphics(arenaCircle, arenaRadius, false);
+            }
+
+            const centerX = config.width / 2;
+            const centerY = config.height / 2;
+
+            for (let id in players) {
+                const p = players[id];
+                const sprite = p.sprite;
+
+                // Update text position
+                p.nameTag.x = sprite.x;
+                p.nameTag.y = sprite.y - 45;
+
+                // Out of bounds check
+                if (gameState === 'PLAYING') {
+                    const dx = sprite.x - centerX;
+                    const dy = sprite.y - centerY;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+
+                    if (dist > arenaRadius) {
+                        eliminatePlayer(id);
+                    }
+                }
+            }
+        }
+
+        function eliminatePlayer(id) {
+            const p = players[id];
+            const rank = Object.keys(players).length;
+
+            // Explosion FX
+            const emitter = game.scene.scenes[0].add.particles(p.sprite.x, p.sprite.y, 'dummy', {
+                speed: { min: 50, max: 200 },
+                scale: { start: 0.4, end: 0 },
+                alpha: { start: 1, end: 0 },
+                lifespan: 800,
+                tint: parseInt(p.color.replace('#', '0x')),
+                quantity: 20,
+                emitting: false
+            });
+            emitter.explode(20);
+
+            socket.emit('eliminate-player', { id: id, rank: rank });
+            removePlayer(id);
+            updateUI();
+        }
+    </script>
+</body>
+
+</html>

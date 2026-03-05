@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Pixel Pulse - Controller</title>
+    <script src="/socket.io/socket.io.js"></script>
+    <style>
+        * {
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+            user-select: none;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            background: #111;
+            color: #fff;
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+
+        #login-screen {
+            text-align: center;
+            padding: 20px;
+            width: 100%;
+            max-width: 300px;
+        }
+
+        h1 {
+            color: #00ffcc;
+            text-shadow: 0 0 10px #00ffcc;
+            margin-bottom: 30px;
+        }
+
+        input {
+            width: 100%;
+            padding: 15px;
+            border: 2px solid #00ffcc;
+            background: transparent;
+            color: #fff;
+            border-radius: 10px;
+            font-size: 18px;
+            margin-bottom: 20px;
+            outline: none;
+        }
+
+        button.join-btn {
+            width: 100%;
+            padding: 15px;
+            background: #00ffcc;
+            color: #000;
+            border: none;
+            border-radius: 10px;
+            font-size: 18px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        #controller-screen {
+            display: none;
+            width: 100%;
+            height: 100%;
+            grid-template-areas:
+                ". up ."
+                "left . right"
+                ". down .";
+            grid-template-columns: 1fr 1fr 1fr;
+            grid-template-rows: 1fr 1fr 1fr;
+            padding: 20px;
+            background: #050505;
+        }
+
+        #game-over-screen {
+            display: none;
+            text-align: center;
+            background: #440000;
+            width: 100%;
+            height: 100%;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .rank-text {
+            font-size: 50px;
+            font-weight: bold;
+            margin: 20px 0;
+        }
+
+        .d-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 40px;
+            background: #222;
+            border: 2px solid #555;
+            border-radius: 15px;
+            color: #fff;
+            margin: 5px;
+            transition: 0.1s;
+        }
+
+        .d-btn:active {
+            background: #00ffcc;
+            color: #000;
+            transform: scale(0.95);
+            box-shadow: 0 0 20px #00ffcc;
+        }
+
+        #up {
+            grid-area: up;
+        }
+
+        #down {
+            grid-area: down;
+        }
+
+        #left {
+            grid-area: left;
+        }
+
+        #right {
+            grid-area: right;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div id="login-screen">
+        <h1>Pixel Pulse</h1>
+        <input type="text" id="nameInput" placeholder="Enter Name..." maxlength="10">
+        <button class="join-btn" onclick="joinGame()">JOIN ROOM</button>
+    </div>
+
+    <div id="controller-screen">
+        <div id="up" class="d-btn">↑</div>
+        <div id="left" class="d-btn">←</div>
+        <div id="right" class="d-btn">→</div>
+        <div id="down" class="d-btn">↓</div>
+    </div>
+
+    <div id="game-over-screen">
+        <h1 style="color: #ff0000; text-shadow: 0 0 10px #ff0000;">GAME OVER</h1>
+        <div class="rank-text" id="rankDisplay">RANK #--</div>
+        <button class="join-btn" onclick="window.location.reload()" style="width: auto; padding: 15px 40px;">TRY
+            AGAIN</button>
+    </div>
+
+    <script>
+        const socket = io();
+        const inputs = { up: false, down: false, left: false, right: false };
+
+        socket.on('join-error', (data) => {
+            alert(data.message);
+            window.location.reload();
+        });
+
+        socket.on('game-over', (data) => {
+            document.getElementById('controller-screen').style.display = 'none';
+            document.getElementById('game-over-screen').style.display = 'flex';
+            document.getElementById('rankDisplay').innerText = `RANK #${data.rank}`;
+            if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+        });
+
+        socket.on('champion-announced', (data) => {
+            // If we are the winner, we might still be in controller screen
+            // or we can show a special celebration
+            alert(`CONGRATULATIONS! ${data.name} is the CHAMPION!`);
+            setTimeout(() => window.location.reload(), 3000);
+        });
+
+        socket.on('state-changed', (data) => {
+            // Optional: Show "Syncing game state..." or disable/enable buttons
+            console.log("Game State:", data.gameState);
+        });
+
+        function getRandomNeonColor() {
+            const colors = ['#00ffcc', '#ff00ff', '#ffff00', '#0077ff', '#ff0000', '#00ff00'];
+            return colors[Math.floor(Math.random() * colors.length)];
+        }
+
+        function joinGame() {
+            const name = document.getElementById('nameInput').value.trim();
+            if (!name) return alert('Please enter a name!');
+
+            socket.emit('player-join', {
+                name: name,
+                color: getRandomNeonColor()
+            });
+
+            document.getElementById('login-screen').style.display = 'none';
+            document.getElementById('controller-screen').style.display = 'grid';
+        }
+
+        function setupButton(id, key) {
+            const btn = document.getElementById(id);
+            const updateInput = (val) => {
+                if (inputs[key] !== val) {
+                    inputs[key] = val;
+                    socket.emit('player-input', inputs);
+                }
+            };
+
+            // Use Pointer Events for better support across mobile and PC
+            btn.addEventListener('pointerdown', (e) => {
+                e.preventDefault();
+                updateInput(true);
+            });
+            btn.addEventListener('pointerup', (e) => {
+                e.preventDefault();
+                updateInput(false);
+            });
+            btn.addEventListener('pointerleave', (e) => {
+                e.preventDefault();
+                if (inputs[key]) updateInput(false);
+            });
+        }
+
+        setupButton('up', 'up');
+        setupButton('down', 'down');
+        setupButton('left', 'left');
+        setupButton('right', 'right');
+
+        // Prevent context menu
+        window.oncontextmenu = function (event) {
+            event.preventDefault();
+            event.stopPropagation();
+            return false;
+        };
+    </script>
+</body>
+
+</html>

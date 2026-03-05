@@ -1,0 +1,13 @@
+{
+  "name": "pixel-pulse-1vs100",
+  "version": "1.0.0",
+  "description": "Real-time multiplayer game prototype using Phaser.js and Socket.io",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "socket.io": "^4.7.2"
+  }
+}
