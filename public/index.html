@@ -65,11 +65,36 @@
             z-index: 101;
         }
 
-        .champion-text {
-            font-size: 80px;
-            color: #fff;
-            text-shadow: 0 0 20px #ff00ff, 0 0 40px #ff00ff, 0 0 60px #ff00ff;
-            animation: pulse 1s infinite alternate;
+        #lobby-controls {
+            position: absolute;
+            bottom: 40px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 200;
+        }
+
+        .start-btn {
+            background: linear-gradient(135deg, #00ffcc, #0099ff);
+            border: none;
+            color: #050510;
+            padding: 15px 40px;
+            font-size: 24px;
+            font-weight: bold;
+            border-radius: 50px;
+            cursor: pointer;
+            box-shadow: 0 0 20px rgba(0, 255, 204, 0.5);
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        .start-btn:hover {
+            transform: scale(1.1);
+            box-shadow: 0 0 40px rgba(0, 255, 204, 0.8);
+        }
+
+        .start-btn:active {
+            transform: scale(0.95);
         }
 
         @keyframes pulse {
@@ -92,6 +117,10 @@
         <div id="countdown-display" class="countdown-text"></div>
     </div>
 
+    <div id="lobby-controls">
+        <button id="start-btn" class="start-btn" onclick="requestStart()">MULAI PERMAINAN</button>
+    </div>
+
     <div id="champion-overlay">
         <div class="champion-text">CHAMPION</div>
         <div id="winner-name" style="font-size: 40px; color: #00ffcc;"></div>
@@ -109,6 +138,10 @@
 
         let gameState = 'LOBBY'; // LOBBY, STARTING, PLAYING, FINISHED
         let countdownValue = 5;
+
+        function requestStart() {
+            socket.emit('request-start');
+        }
 
         const config = {
             type: Phaser.AUTO,
@@ -140,7 +173,14 @@
 
         const game = new Phaser.Game(config);
 
-        function preload() { }
+        function preload() {
+            // Load character assets
+            for (let i = 1; i <= 9; i++) {
+                this.load.image(`char_${i}`, `/assets/char_${i}.png`);
+            }
+            // Dummy for particles
+            this.add.graphics().fillStyle(0xffffff).fillCircle(5, 5, 5).generateTexture('dummy', 10, 10);
+        }
 
         function create() {
             const self = this;
@@ -173,19 +213,32 @@
 
             // Ensure we start in LOBBY state
             gameState = 'LOBBY';
+            document.getElementById('lobby-controls').style.display = 'block';
+
             socket.emit('host-join');
             socket.emit('update-state', gameState);
 
             socket.on('new-player', (playerData) => {
-                addPlayer(self, playerData);
-                checkLobby(self);
+                // Only non-spectators get added to the physical game
+                if (!playerData.isSpectator) {
+                    addPlayer(self, playerData);
+                }
                 updateUI();
+            });
+
+            socket.on('trigger-start', () => {
+                if (gameState === 'LOBBY' && Object.keys(players).length >= 2) {
+                    document.getElementById('lobby-controls').style.display = 'none';
+                    startCountdown(self);
+                } else if (Object.keys(players).length < 2) {
+                    alert("Butuh minimal 2 pemain untuk memulai!");
+                }
             });
 
             socket.on('player-move', (data) => {
                 const p = players[data.id];
                 if (p && p.sprite && p.sprite.body) {
-                    const force = 1200; // Increased acceleration
+                    const force = 3000; // Even higher acceleration because of drag
                     const input = data.input;
 
                     if (input.up) p.sprite.setAccelerationY(-force);
@@ -297,20 +350,17 @@
             const x = centerX + Math.cos(angle) * dist;
             const y = centerY + Math.sin(angle) * dist;
 
-            const radius = 25;
-            const graphics = scene.add.graphics();
-            graphics.lineStyle(4, parseInt(data.color.replace('#', '0x')), 1);
-            graphics.strokeCircle(radius, radius, radius - 2);
-            graphics.fillStyle(parseInt(data.color.replace('#', '0x')), 0.5);
-            graphics.fillCircle(radius, radius, radius - 2);
-
-            const textureName = `circle_${data.id}`;
-            graphics.generateTexture(textureName, radius * 2, radius * 2);
-            graphics.destroy();
+            // Pick a random character image (1-9)
+            const charIndex = Math.floor(Math.random() * 9) + 1;
+            const textureName = `char_${charIndex}`;
 
             const sprite = scene.physics.add.sprite(x, y, textureName);
-            sprite.setCircle(radius);
-            sprite.setDrag(100);
+            sprite.setScale(0.3); // Even smaller characters
+            sprite.setCircle(32); // 32 radius for the original 64x64 texture
+
+            // Refined Physics: Snappier movement
+            sprite.setDrag(1200);
+            sprite.setAngularDrag(1200);
             sprite.setBounce(1);
             sprite.setMass(1);
 

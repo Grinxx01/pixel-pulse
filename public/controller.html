@@ -16,7 +16,7 @@
         body {
             margin: 0;
             padding: 0;
-            background: #111;
+            background: #050510;
             color: #fff;
             font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
             height: 100vh;
@@ -29,90 +29,110 @@
 
         #login-screen {
             text-align: center;
-            padding: 20px;
-            width: 100%;
-            max-width: 300px;
+            padding: 40px;
+            width: 90%;
+            max-width: 400px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 20px;
+            border: 1px solid rgba(0, 255, 204, 0.3);
+            box-shadow: 0 0 30px rgba(0, 0, 0, 0.5);
+        }
+
+        #nickname-display {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.7);
+            color: #00ffcc;
+            padding: 10px 25px;
+            border-radius: 30px;
+            border: 1px solid #00ffcc;
+            font-weight: bold;
+            display: none;
+            z-index: 1000;
+            box-shadow: 0 0 15px rgba(0, 255, 204, 0.3);
         }
 
         h1 {
             color: #00ffcc;
             text-shadow: 0 0 10px #00ffcc;
-            margin-bottom: 30px;
+            margin-bottom: 20px;
+            font-size: 28px;
         }
 
         input {
             width: 100%;
             padding: 15px;
             border: 2px solid #00ffcc;
-            background: transparent;
+            background: rgba(0, 0, 0, 0.3);
             color: #fff;
-            border-radius: 10px;
+            border-radius: 12px;
             font-size: 18px;
             margin-bottom: 20px;
             outline: none;
+            text-align: center;
         }
 
         button.join-btn {
             width: 100%;
             padding: 15px;
-            background: #00ffcc;
-            color: #000;
+            background: linear-gradient(135deg, #00ffcc, #0099ff);
+            color: #050510;
             border: none;
-            border-radius: 10px;
-            font-size: 18px;
+            border-radius: 12px;
+            font-size: 20px;
             font-weight: bold;
             cursor: pointer;
+            box-shadow: 0 5px 15px rgba(0, 255, 204, 0.4);
+            transition: 0.2s;
+        }
+
+        button.join-btn:active {
+            transform: scale(0.98);
         }
 
         #controller-screen {
             display: none;
             width: 100%;
             height: 100%;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background: #050510;
+        }
+
+        .controls-grid {
+            display: grid;
             grid-template-areas:
                 ". up ."
                 "left . right"
                 ". down .";
-            grid-template-columns: 1fr 1fr 1fr;
-            grid-template-rows: 1fr 1fr 1fr;
+            gap: 25px;
             padding: 20px;
-            background: #050505;
-        }
-
-        #game-over-screen {
-            display: none;
-            text-align: center;
-            background: #440000;
-            width: 100%;
-            height: 100%;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-        }
-
-        .rank-text {
-            font-size: 50px;
-            font-weight: bold;
-            margin: 20px 0;
         }
 
         .d-btn {
+            width: 95px;
+            height: 95px;
             display: flex;
             align-items: center;
             justify-content: center;
             font-size: 40px;
-            background: #222;
-            border: 2px solid #555;
-            border-radius: 15px;
-            color: #fff;
-            margin: 5px;
+            background: #111;
+            border: 3px solid #00ffcc;
+            border-radius: 20px;
+            color: #00ffcc;
             transition: 0.1s;
+            box-shadow: 0 6px 0 #005544, 0 5px 15px rgba(0, 0, 0, 0.5);
+            touch-action: none;
         }
 
         .d-btn:active {
             background: #00ffcc;
-            color: #000;
-            transform: scale(0.95);
-            box-shadow: 0 0 20px #00ffcc;
+            color: #050510;
+            transform: translateY(4px);
+            box-shadow: 0 2px 0 #005544, 0 2px 5px rgba(0, 0, 0, 0.5);
         }
 
         #up {
@@ -130,29 +150,81 @@
         #right {
             grid-area: right;
         }
+
+        #spectator-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.85);
+            color: #fff;
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 2000;
+            text-align: center;
+            padding: 30px;
+        }
+
+        #game-over-screen {
+            display: none;
+            text-align: center;
+            background: rgba(40, 0, 0, 0.9);
+            width: 100%;
+            height: 100%;
+            position: fixed;
+            top: 0;
+            left: 0;
+            z-index: 3000;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .rank-text {
+            font-size: 60px;
+            font-weight: 900;
+            margin: 20px 0;
+            color: #00ffcc;
+            text-shadow: 0 0 20px rgba(0, 255, 204, 0.5);
+        }
     </style>
 </head>
 
 <body>
 
+    <div id="nickname-display"></div>
+
     <div id="login-screen">
         <h1>Pixel Pulse</h1>
-        <input type="text" id="nameInput" placeholder="Enter Name..." maxlength="10">
-        <button class="join-btn" onclick="joinGame()">JOIN ROOM</button>
+        <p style="color: #888; margin-top: -15px; margin-bottom: 25px;">Multiplayer Sumo Battle</p>
+        <input type="text" id="nameInput" placeholder="Nickname..." maxlength="10">
+        <button class="join-btn" onclick="joinGame()">JOIN ARENA</button>
     </div>
 
     <div id="controller-screen">
-        <div id="up" class="d-btn">↑</div>
-        <div id="left" class="d-btn">←</div>
-        <div id="right" class="d-btn">→</div>
-        <div id="down" class="d-btn">↓</div>
+        <div class="controls-grid">
+            <div id="up" class="d-btn">↑</div>
+            <div id="left" class="d-btn">←</div>
+            <div id="right" class="d-btn">→</div>
+            <div id="down" class="d-btn">↓</div>
+        </div>
+    </div>
+
+    <div id="spectator-overlay">
+        <h2 style="color: #00ffcc; font-size: 32px; margin-bottom: 10px;">SPECTATOR MODE</h2>
+        <p style="color: #aaa; font-size: 18px;">Game sedang berlangsung.</p>
+        <p style="color: #aaa;">Kamu akan masuk di ronde berikutnya!</p>
     </div>
 
     <div id="game-over-screen">
-        <h1 style="color: #ff0000; text-shadow: 0 0 10px #ff0000;">GAME OVER</h1>
+        <h1 style="color: #ff3333; text-shadow: 0 0 15px rgba(255, 51, 51, 0.5); font-size: 40px;">DIELIMINASI!</h1>
         <div class="rank-text" id="rankDisplay">RANK #--</div>
-        <button class="join-btn" onclick="window.location.reload()" style="width: auto; padding: 15px 40px;">TRY
-            AGAIN</button>
+        <p style="color: #aaa; margin-bottom: 30px;">Tunggu ronde berikutnya di layar utama...</p>
+        <button class="join-btn" onclick="window.location.reload()" style="width: auto; padding: 15px 40px;">BALIK KE
+            LOBBY</button>
     </div>
 
     <script>
@@ -164,6 +236,10 @@
             window.location.reload();
         });
 
+        socket.on('join-spectator', (data) => {
+            document.getElementById('spectator-overlay').style.display = 'flex';
+        });
+
         socket.on('game-over', (data) => {
             document.getElementById('controller-screen').style.display = 'none';
             document.getElementById('game-over-screen').style.display = 'flex';
@@ -172,25 +248,27 @@
         });
 
         socket.on('champion-announced', (data) => {
-            // If we are the winner, we might still be in controller screen
-            // or we can show a special celebration
-            alert(`CONGRATULATIONS! ${data.name} is the CHAMPION!`);
+            alert(`RONDE SELESAI! ${data.name} adalah CHAMPION!`);
             setTimeout(() => window.location.reload(), 3000);
         });
 
         socket.on('state-changed', (data) => {
-            // Optional: Show "Syncing game state..." or disable/enable buttons
             console.log("Game State:", data.gameState);
+            if (data.gameState === 'LOBBY') {
+                document.getElementById('game-over-screen').style.display = 'none';
+                document.getElementById('spectator-overlay').style.display = 'none';
+            }
         });
 
         function getRandomNeonColor() {
-            const colors = ['#00ffcc', '#ff00ff', '#ffff00', '#0077ff', '#ff0000', '#00ff00'];
+            const colors = ['#00ffcc', '#ff00ff', '#ffff00', '#0077ff', '#ff3333', '#33ff33'];
             return colors[Math.floor(Math.random() * colors.length)];
         }
 
         function joinGame() {
-            const name = document.getElementById('nameInput').value.trim();
-            if (!name) return alert('Please enter a name!');
+            const nameEl = document.getElementById('nameInput');
+            const name = nameEl.value.trim();
+            if (!name) return alert('Masukkan namamu!');
 
             socket.emit('player-join', {
                 name: name,
@@ -198,7 +276,11 @@
             });
 
             document.getElementById('login-screen').style.display = 'none';
-            document.getElementById('controller-screen').style.display = 'grid';
+            document.getElementById('controller-screen').style.display = 'flex';
+
+            const nickDisplay = document.getElementById('nickname-display');
+            nickDisplay.innerText = name;
+            nickDisplay.style.display = 'block';
         }
 
         function setupButton(id, key) {
@@ -210,7 +292,6 @@
                 }
             };
 
-            // Use Pointer Events for better support across mobile and PC
             btn.addEventListener('pointerdown', (e) => {
                 e.preventDefault();
                 updateInput(true);
@@ -230,12 +311,8 @@
         setupButton('left', 'left');
         setupButton('right', 'right');
 
-        // Prevent context menu
-        window.oncontextmenu = function (event) {
-            event.preventDefault();
-            event.stopPropagation();
-            return false;
-        };
+        // Prevent system menus
+        window.oncontextmenu = (e) => e.preventDefault();
     </script>
 </body>
 

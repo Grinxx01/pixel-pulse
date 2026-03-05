@@ -31,21 +31,32 @@ io.on('connection', (socket) => {
 
     // Player joins from controller
     socket.on('player-join', (data) => {
-        if (gameState !== 'LOBBY') {
-            socket.emit('join-error', { message: 'Game sedang berlangsung, tunggu ronde berikutnya.' });
-            return;
-        }
-
         const playerName = (data.name || 'Player').substring(0, 10);
+
+        // If game is not in LOBBY, join as spectator
+        const isSpectator = (gameState !== 'LOBBY');
 
         players[socket.id] = {
             id: socket.id,
             name: playerName,
-            color: data.color || '#ffffff'
+            color: data.color || '#ffffff',
+            isSpectator: isSpectator
         };
 
+        if (isSpectator) {
+            socket.emit('join-spectator', { message: 'Game sedang berlangsung, kamu masuk sebagai penonton.' });
+        }
+
         io.to('host-room').emit('new-player', players[socket.id]);
-        console.log(`Player joined: ${playerName} (${socket.id})`);
+        console.log(`Player joined: ${playerName} (${socket.id}) ${isSpectator ? '[SPECTATOR]' : ''}`);
+    });
+
+    // Handle game start request from host
+    socket.on('request-start', () => {
+        if (gameState === 'LOBBY') {
+            console.log('Host requested game start');
+            io.to('host-room').emit('trigger-start');
+        }
     });
 
     // Handle game state changes from host
