@@ -135,6 +135,9 @@
         let targetRadius;
         let initialRadius;
         let grid;
+        let scanLine;
+        let arenaCore;
+        let hudLayer;
 
         let gameState = 'LOBBY'; // LOBBY, STARTING, PLAYING, FINISHED
         let countdownValue = 5;
@@ -185,15 +188,33 @@
         function create() {
             const self = this;
 
-            // Create Neon Grid
-            grid = this.add.grid(this.cameras.main.centerX, this.cameras.main.centerY, config.width * 2, config.height * 2, 64, 64, 0x000000, 0, 0x00ffcc, 0.1);
+            // Enhance background
+            const bgGraphics = this.add.graphics();
+            bgGraphics.fillGradientStyle(0x050510, 0x050510, 0x0a0520, 0x0a0520, 1);
+            bgGraphics.fillRect(0, 0, config.width, config.height);
+            bgGraphics.setScrollFactor(0);
+            bgGraphics.depth = -10;
 
-            // Background Gradient simulation
-            const graphics = this.add.graphics();
-            graphics.fillGradientStyle(0x050510, 0x050510, 0x100520, 0x100520, 1);
-            graphics.fillRect(0, 0, this.cameras.main.width, this.cameras.main.height);
-            graphics.setScrollFactor(0);
-            graphics.depth = -1;
+            // Create Neon Grid
+            grid = this.add.grid(this.cameras.main.centerX, this.cameras.main.centerY, config.width * 2, config.height * 2, 64, 64, 0x000000, 0, 0x00ffcc, 0.05);
+            grid.depth = -9;
+
+            // Scanning Line Effect
+            scanLine = this.add.graphics();
+            scanLine.lineStyle(2, 0x00ffcc, 0.1);
+            scanLine.strokeLineShape(new Phaser.Geom.Line(0, 0, config.width, 0));
+            scanLine.depth = -8;
+
+            // Arena Core Visuals (Rotating Background)
+            arenaCore = this.add.container(this.cameras.main.centerX, this.cameras.main.centerY);
+            arenaCore.depth = -7;
+            const coreG = this.add.graphics();
+            coreG.lineStyle(2, 0x00ffcc, 0.1);
+            coreG.strokeCircle(0, 0, 100);
+            coreG.strokeRect(-80, -80, 160, 160);
+            coreG.lineStyle(1, 0xff00ff, 0.05);
+            coreG.strokeCircle(0, 0, 150);
+            arenaCore.add(coreG);
 
             // Arena setup
             initialRadius = Math.min(this.cameras.main.width, this.cameras.main.height) * 0.45;
@@ -202,6 +223,7 @@
 
             arenaCircle = this.add.graphics();
             updateArenaGraphics(arenaCircle, arenaRadius, false);
+            arenaCircle.depth = -5;
 
             this.playerGroup = this.physics.add.group({
                 bounceX: 1,
@@ -238,7 +260,7 @@
             socket.on('player-move', (data) => {
                 const p = players[data.id];
                 if (p && p.sprite && p.sprite.body) {
-                    const force = 3000; // Even higher acceleration because of drag
+                    const force = 500; // ubah untuk kecepatan dan berat karakter
                     const input = data.input;
 
                     if (input.up) p.sprite.setAccelerationY(-force);
@@ -278,10 +300,53 @@
                 paused: true
             });
 
-            window.addEventListener('resize', () => {
-                game.scale.resize(window.innerWidth, window.innerHeight);
-                // Adjust arena center if needed
+            // HUD Decorative Elements
+            hudLayer = this.add.graphics();
+            hudLayer.setScrollFactor(0);
+            hudLayer.depth = 50;
+            drawHUD(hudLayer);
+
+            this.scale.on('resize', () => {
+                const width = self.scale.width;
+                const height = self.scale.height;
+                const centerX = width / 2;
+                const centerY = height / 2;
+
+                // Update Grid & Core center
+                grid.setPosition(centerX, centerY);
+                arenaCore.setPosition(centerX, centerY);
+
+                // Redraw HUD for new dimensions
+                drawHUD(hudLayer);
+
+                // Update background gradient if necessary
+                bgGraphics.clear();
+                bgGraphics.fillGradientStyle(0x050510, 0x050510, 0x0a0520, 0x0a0520, 1);
+                bgGraphics.fillRect(0, 0, width, height);
             });
+        }
+
+        function drawHUD(g) {
+            g.clear();
+            const w = game.config.width;
+            const h = game.config.height;
+            g.lineStyle(2, 0x00ffcc, 0.2);
+
+            // Corners
+            const size = 40;
+            const pad = 30;
+            // TL
+            g.strokeLineShape(new Phaser.Geom.Line(pad, pad, pad + size, pad));
+            g.strokeLineShape(new Phaser.Geom.Line(pad, pad, pad, pad + size));
+            // TR
+            g.strokeLineShape(new Phaser.Geom.Line(w - pad, pad, w - pad - size, pad));
+            g.strokeLineShape(new Phaser.Geom.Line(w - pad, pad, w - pad, pad + size));
+            // BL
+            g.strokeLineShape(new Phaser.Geom.Line(pad, h - pad, pad + size, h - pad));
+            g.strokeLineShape(new Phaser.Geom.Line(pad, h - pad, pad, h - pad - size));
+            // BR
+            g.strokeLineShape(new Phaser.Geom.Line(w - pad, h - pad, w - pad - size, h - pad));
+            g.strokeLineShape(new Phaser.Geom.Line(w - pad, h - pad, w - pad, h - pad - size));
         }
 
         function checkLobby(scene) {
@@ -328,18 +393,41 @@
 
         function updateArenaGraphics(g, radius, isWarning) {
             g.clear();
-            const color = isWarning ? 0xff0000 : 0x00ffcc;
             const centerX = game.scene.scenes[0].cameras.main.centerX;
             const centerY = game.scene.scenes[0].cameras.main.centerY;
 
-            // Glow layers
-            for (let i = 10; i > 0; i--) {
-                g.lineStyle(i, color, 0.1);
-                g.strokeCircle(centerX, centerY, radius + i);
-            }
+            const cyan = 0x00ffcc;
+            const magenta = 0xff00ff;
+            const blood = 0xff0033;
 
-            g.lineStyle(4, color, 0.8);
-            g.strokeCircle(centerX, centerY, radius);
+            if (isWarning) {
+                // Critical Warning Glow
+                for (let i = 15; i > 0; i--) {
+                    g.lineStyle(i, blood, 0.1);
+                    g.strokeCircle(centerX, centerY, radius + i);
+                }
+                g.lineStyle(4, blood, 1);
+                g.strokeCircle(centerX, centerY, radius);
+            } else {
+                // Premium Triple Neon Layer
+                // 1. Wide Blueish outer glow
+                for (let i = 20; i > 10; i--) {
+                    g.lineStyle(2, 0x0066ff, 0.03);
+                    g.strokeCircle(centerX, centerY, radius + i);
+                }
+                // 2. Strong Cyan center glow
+                for (let i = 10; i > 0; i--) {
+                    g.lineStyle(i, cyan, 0.15);
+                    g.strokeCircle(centerX, centerY, radius + i);
+                }
+                // 3. Sharp Magenta accent inner
+                g.lineStyle(2, magenta, 0.4);
+                g.strokeCircle(centerX, centerY, radius + 2);
+
+                // 4. White core line
+                g.lineStyle(2, 0xffffff, 0.8);
+                g.strokeCircle(centerX, centerY, radius);
+            }
         }
 
         function addPlayer(scene, data) {
@@ -414,9 +502,17 @@
         function update(time, delta) {
             if (gameState === 'FINISHED') return;
 
-            // Scroll Grid
+            // Scroll Grid & Animation Effects
             grid.y += 0.5;
             if (grid.y > config.height / 2 + 64) grid.y = config.height / 2;
+
+            // Scan Line movement
+            scanLine.y = (time * 0.1) % (config.height + 200) - 100;
+
+            // Core Rotation
+            arenaCore.rotation += 0.005;
+            const pulse = 1 + Math.sin(time * 0.002) * 0.05;
+            arenaCore.setScale(pulse);
 
             // Smooth shrinking
             if (gameState === 'PLAYING' && arenaRadius > targetRadius) {
@@ -426,6 +522,10 @@
 
             const centerX = config.width / 2;
             const centerY = config.height / 2;
+
+            // Center core position
+            arenaCore.x = centerX;
+            arenaCore.y = centerY;
 
             for (let id in players) {
                 const p = players[id];
